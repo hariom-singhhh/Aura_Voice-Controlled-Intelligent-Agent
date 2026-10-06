@@ -1,0 +1,27 @@
+# Local Voice Agent - Offline Task Automation
+# Python 3.8+
+
+# Speech-to-text (local Whisper)
+openai-whisper>=20231117
+
+# Audio I/O
+sounddevice>=0.4.6
+scipy>=1.11.0
+numpy>=1.24.0
+
+# Text-to-speech (local, no API)
+pyttsx3>=2.90
+
+# Screen & input automation
+pyautogui>=0.9.54
+Pillow>=10.0.0
+pyperclip>=1.8.2
+
+# OCR (requires Tesseract installed on system)
+pytesseract>=0.3.10
+
+# LLM (local Ollama - optional)
+requests>=2.31.0
+
+# Windows volume control (optional; omit if not on Windows)
+pycaw>=20230407

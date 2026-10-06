@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nova – Voice Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* ── Main container ── */
+        .nova-widget {
+            width: 340px;
+            height: 285px;
+            background: rgba(5, 5, 15, 0.92);
+            border-radius: 22px;
+            border: 1px solid rgba(120, 80, 255, 0.18);
+            backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 12px 14px 10px;
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            overflow: hidden;
+            box-shadow:
+                0 0 34px rgba(100, 60, 255, 0.14),
+                0 12px 36px rgba(0, 0, 0, 0.45),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: width 0.25s ease, height 0.25s ease, opacity 0.2s ease;
+            cursor: grab;
+        }
+
+        .nova-widget.dragging {
+            cursor: grabbing;
+        }
+
+        .nova-widget.minimized {
+            width: 74px;
+            height: 74px;
+            border-radius: 999px;
+            padding: 0;
+            overflow: visible;
+        }
+
+        .nova-widget.maximized {
+            width: min(460px, calc(100vw - 28px));
+            height: min(380px, calc(100vh - 28px));
+        }
+
+        /* subtle grid bg */
+        .nova-widget::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(100, 80, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(100, 80, 255, 0.04) 1px, transparent 1px);
+            background-size: 28px 28px;
+            border-radius: 22px;
+            pointer-events: none;
+        }
+
+        .nova-widget.minimized::before {
+            border-radius: 999px;
+        }
+
+        /* ── Header ── */
+        .header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+            margin-bottom: 2px;
+        }
+
+        .nova-widget.minimized .header,
+        .nova-widget.minimized .blob-area,
+        .nova-widget.minimized .status-row {
+            display: none;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #7c5cfc;
+            box-shadow: 0 0 8px #7c5cfc;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 8px #7c5cfc;
+            }
+
+            50% {
+                opacity: 0.5;
+                box-shadow: 0 0 3px #7c5cfc;
+            }
+        }
+
+        .brand-name {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #a78bfa, #60a5fa);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .icon-btn {
+            width: 38px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border-color: rgba(120, 80, 255, 0.4);
+        }
+
+        /* ── Blob canvas area ── */
+        .blob-area {
+            position: relative;
+            width: 210px;
+            height: 210px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            margin: 10px 0 0;
+            transition: opacity 0.2s ease, transform 0.25s ease;
+        }
+
+        .mini-assistant {
+            display: none;
+            position: absolute;
+            inset: 0;
+            border-radius: 999px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(160, 120, 255, 0.45);
+            background: radial-gradient(circle at 35% 30%, rgba(120, 80, 255, 0.5), rgba(18, 14, 38, 0.95));
+            box-shadow:
+                0 0 16px rgba(120, 80, 255, 0.45),
+                0 8px 24px rgba(0, 0, 0, 0.4);
+            cursor: pointer;
+            z-index: 30;
+        }
+
+        .mini-assistant svg {
+            width: 22px;
+            height: 22px;
+            fill: rgba(220, 200, 255, 0.95);
+        }
+
+        .mini-dot {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #8b5cf6;
+            box-shadow: 0 0 10px #8b5cf6;
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+
+        .nova-widget.minimized .mini-assistant {
+            display: flex;
+        }
+
+        canvas#blobCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* mic icon in center of blob */
+        .mic-icon {
+            position: relative;
+            z-index: 10;
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: rgba(10, 5, 30, 0.7);
+            border: 1.5px solid rgba(160, 120, 255, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .mic-icon:hover {
+            border-color: rgba(160, 120, 255, 0.9);
+            box-shadow: 0 0 20px rgba(130, 90, 255, 0.5);
+        }
+
+        .mic-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: rgba(180, 150, 255, 0.9);
+        }
+
+        /* ── Status label ── */
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 10;
+            margin-top: 2px;
+        }
+
+        .status-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 8px #4ade80;
+        }
+
+        .status-indicator.sleeping {
+            background: #6366f1;
+            box-shadow: 0 0 6px #6366f1;
+        }
+
+        .status-indicator.listening {
+            background: #a78bfa;
+            box-shadow: 0 0 10px #a78bfa;
+            animation: blink 0.8s ease-in-out infinite;
+        }
+
+        .status-indicator.processing {
+            background: #facc15;
+            box-shadow: 0 0 8px #facc15;
+            animation: blink 0.4s ease-in-out infinite;
+        }
+
+        .status-indicator.speaking {
+            background: #34d399;
+            box-shadow: 0 0 10px #34d399;
+            animation: blink 0.6s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .status-text {
+            font-size: 25px;
+            color: rgba(200, 190, 255, 0.66);
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        /* ── Transcription box ── */
+        .transcript-box,
+        .result-box,
+        .log-feed,
+        .controls {
+            display: none;
+        }
+
+        .transcript-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: rgba(160, 140, 255, 0.5);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .transcript-text {
+            font-size: 12px;
+            color: rgba(230, 220, 255, 0.88);
+            line-height: 1.4;
+            font-style: italic;
+            transition: all 0.3s;
+            overflow: hidden;
+            display: -webkit-box;
+            line-clamp: 2;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        /* typing cursor */
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 12px;
+            background: #a78bfa;
+            margin-left: 2px;
+            vertical-align: middle;
+            animation: blink 0.7s ease-in-out infinite;
+        }
+
+        .result-icon {
+            font-size: 14px;
+            line-height: 1;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+
+        .result-text {
+            font-size: 11.5px;
+            color: rgba(210, 200, 255, 0.85);
+            line-height: 1.45;
+            flex: 1;
+        }
+
+        .log-item {
+            font-size: 10.5px;
+            color: rgba(160, 150, 200, 0.5);
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 1px 0;
+            transition: opacity 0.5s;
+        }
+
+        .log-item.new {
+            color: rgba(167, 139, 250, 0.7);
+        }
+
+        /* ── Scrollbar hide ── */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* ── Drag handle ── */
+        .drag-handle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 0;
+            cursor: move;
+            z-index: 0;
+            border-radius: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="nova-widget" id="novaWidget">
+        <div class="drag-handle" id="dragHandle"></div>
+
+        <!-- Header -->
+        <div class="header">
+            <div class="brand">
+                <div class="brand-dot" id="brandDot"></div>
+                <span class="brand-name">Nova</span>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" title="Settings" onclick="openSettings()">⚙</button>
+                <button class="icon-btn" id="maximizeBtn" title="Maximize" onclick="maximizeWidget()">□</button>
+                <button class="icon-btn" id="minimizeBtn" title="Minimize" onclick="minimizeWidget()">—</button>
+            </div>
+        </div>
+
+        <button class="mini-assistant" id="miniAssistant" title="Restore assistant"
+            onclick="onMiniAssistantClick(event)">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path
+                    d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-6 9a6 6 0 0 0 12 0h2a8 8 0 0 1-7 7.938V20h3v2H8v-2h3v-3.062A8 8 0 0 1 4 10h2z" />
+            </svg>
+            <span class="mini-dot"></span>
+        </button>
+
+        <!-- Blob -->
+        <div class="blob-area">
+            <canvas id="blobCanvas" width="210" height="210"></canvas>
+            <div class="mic-icon" id="micBtn" onclick="toggleListen()">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-6 9a6 6 0 0 0 12 0h2a8 8 0 0 1-7 7.938V20h3v2H8v-2h3v-3.062A8 8 0 0 1 4 10h2z" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div class="status-row">
+            <div class="status-indicator sleeping" id="statusDot"></div>
+            <span class="status-text" id="statusText">Awaiting Wake Word</span>
+        </div>
+
+        <!-- Transcript -->
+        <div class="transcript-box">
+            <div class="transcript-label">You said</div>
+            <div class="transcript-text" id="transcriptText">
+                Say <strong style="color:#a78bfa">"Nova"</strong> to wake me up…
+            </div>
+        </div>
+
+        <!-- Result -->
+        <div class="result-box">
+            <span class="result-icon" id="resultIcon">✦</span>
+            <span class="result-text" id="resultText">Ready and waiting for your command.</span>
+        </div>
+
+        <!-- Log -->
+        <div class="log-feed" id="logFeed"></div>
+
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════
+        //  MORPHING BLOB CANVAS
+        // ═══════════════════════════════════════════
+        const canvas = document.getElementById('blobCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = 210, H = 210, CX = W / 2, CY = H / 2;
+
+        let agentState = 'sleeping'; // sleeping | listening | processing | speaking
+        let animFrame = 0;
+        let volumeLevel = 0; // 0–1, driven by backend events
+        let widgetState = localStorage.getItem('nova-widget-state') || 'normal'; // minimized | normal | maximized
+
+        // Perlin-like smooth noise using sin/cos superposition
+        function noise(t, freq, amp, phase) {
+            return Math.sin(t * freq + phase) * amp;
+        }
+
+        function getBlobRadius(angle, t) {
+            const base = 62;
+            const stateAmps = {
+                sleeping: [6, 3, 2, 1],
+                listening: [12, 7, 5, 3],
+                processing: [16, 10, 7, 4],
+                speaking: [14, 8, 6, 3],
+            };
+            const amps = stateAmps[agentState] || stateAmps.sleeping;
+            const speeds = {
+                sleeping: 0.4,
+                listening: 1.4,
+                processing: 2.2,
+                speaking: 1.8,
+            };
+            const speed = speeds[agentState] || 0.4;
+            const vol = volumeLevel * 18;
+
+            return (
+                base +
+                noise(angle, 2, amps[0] + vol, t * speed * 0.7) +
+                noise(angle, 3, amps[1] + vol * 0.5, t * speed * 1.1 + 1.2) +
+                noise(angle, 5, amps[2], t * speed * 1.7 + 2.4) +
+                noise(angle, 7, amps[3], t * speed * 2.3 + 3.7)
+            );
+        }
+
+        function getGradientColors() {
+            const t = animFrame * 0.008;
+            const r1 = Math.floor(80 + 40 * Math.sin(t * 0.7));
+            const g1 = Math.floor(50 + 30 * Math.sin(t * 0.5 + 1));
+            const b1 = Math.floor(200 + 55 * Math.sin(t * 0.9 + 2));
+            const r2 = Math.floor(160 + 60 * Math.sin(t * 0.6 + 3));
+            const g2 = Math.floor(30 + 20 * Math.sin(t * 0.8 + 0.5));
+            const b2 = Math.floor(200 + 55 * Math.sin(t * 1.1));
+            const r3 = Math.floor(40 + 40 * Math.sin(t * 0.4 + 1.5));
+            const g3 = Math.floor(180 + 50 * Math.sin(t * 0.6 + 2));
+            const b3 = Math.floor(230 + 25 * Math.sin(t * 0.7 + 3.5));
+            return {
+                c1: `rgb(${r1},${g1},${b1})`,
+                c2: `rgb(${r2},${g2},${b2})`,
+                c3: `rgb(${r3},${g3},${b3})`,
+            };
+        }
+
+        function drawBlob(t) {
+            ctx.clearRect(0, 0, W, H);
+
+            const steps = 180;
+            const pts = [];
+            for (let i = 0; i <= steps; i++) {
+                const angle = (i / steps) * Math.PI * 2;
+                const r = getBlobRadius(angle, t);
+                pts.push({ x: CX + r * Math.cos(angle), y: CY + r * Math.sin(angle) });
+            }
+
+            // Glow layers
+            for (let g = 3; g >= 1; g--) {
+                ctx.save();
+                ctx.filter = `blur(${g * 7}px)`;
+                ctx.globalAlpha = 0.18 / g;
+                const colors = getGradientColors();
+                const grad = ctx.createRadialGradient(CX - 10, CY - 15, 10, CX, CY, 78);
+                grad.addColorStop(0, colors.c1);
+                grad.addColorStop(0.5, colors.c2);
+                grad.addColorStop(1, colors.c3);
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) {
+                    const p = pts[i], pp = pts[i - 1];
+                    ctx.quadraticCurveTo(pp.x, pp.y, (pp.x + p.x) / 2, (pp.y + p.y) / 2);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Main filled blob
+            const colors = getGradientColors();
+            const grad = ctx.createRadialGradient(CX - 18, CY - 22, 8, CX + 10, CY + 10, 82);
+            grad.addColorStop(0, colors.c1);
+            grad.addColorStop(0.38, colors.c2);
+            grad.addColorStop(0.72, `rgb(100,50,220)`);
+            grad.addColorStop(1, colors.c3);
+            ctx.globalAlpha = 0.92;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) {
+                const p = pts[i], pp = pts[i - 1];
+                ctx.quadraticCurveTo(pp.x, pp.y, (pp.x + p.x) / 2, (pp.y + p.y) / 2);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Highlight sheen
+            ctx.globalAlpha = 0.22;
+            const sheen = ctx.createRadialGradient(CX - 22, CY - 26, 2, CX - 10, CY - 10, 55);
+            sheen.addColorStop(0, 'rgba(255,255,255,0.9)');
+            sheen.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = sheen;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) {
+                const p = pts[i], pp = pts[i - 1];
+                ctx.quadraticCurveTo(pp.x, pp.y, (pp.x + p.x) / 2, (pp.y + p.y) / 2);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Inner contour rings
+            ctx.globalAlpha = 0.08;
+            for (let ring = 0; ring < 3; ring++) {
+                const scale = 0.7 - ring * 0.13;
+                ctx.save();
+                ctx.translate(CX, CY);
+                ctx.scale(scale, scale);
+                ctx.translate(-CX, -CY);
+                ctx.strokeStyle = 'rgba(200,180,255,0.8)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) {
+                    const p = pts[i], pp = pts[i - 1];
+                    ctx.quadraticCurveTo(pp.x, pp.y, (pp.x + p.x) / 2, (pp.y + p.y) / 2);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            ctx.globalAlpha = 1;
+        }
+
+        function animate() {
+            animFrame++;
+            const t = animFrame * 0.016;
+            drawBlob(t);
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // ═══════════════════════════════════════════
+        //  STATE MANAGEMENT
+        // ═══════════════════════════════════════════
+        const stateConfig = {
+            sleeping: { dot: 'sleeping', text: 'Awaiting Wake Word', icon: '💤' },
+            listening: { dot: 'listening', text: 'Listening…', icon: '🎙' },
+            processing: { dot: 'processing', text: 'Processing Command…', icon: '🧠' },
+            speaking: { dot: 'speaking', text: 'Speaking…', icon: '🔊' },
+            error: { dot: 'sleeping', text: 'Error occurred', icon: '⚠️' },
+        };
+
+        function setState(state) {
+            agentState = state;
+            const cfg = stateConfig[state] || stateConfig.sleeping;
+            document.getElementById('statusDot').className = `status-indicator ${cfg.dot}`;
+            document.getElementById('statusText').textContent = cfg.text;
+        }
+
+        function setTranscript(text) {
+            const el = document.getElementById('transcriptText');
+            el.innerHTML = text ? `"${text}"` : `Say <strong style="color:#a78bfa">"Nova"</strong> to wake me up…`;
+        }
+
+        function setResult(text, icon = '✦') {
+            document.getElementById('resultText').textContent = text;
+            document.getElementById('resultIcon').textContent = icon;
+        }
+
+        function addLog(text) {
+            const feed = document.getElementById('logFeed');
+            const item = document.createElement('div');
+            item.className = 'log-item new';
+            item.textContent = `› ${text}`;
+            feed.prepend(item);
+            setTimeout(() => item.classList.remove('new'), 200);
+            // keep max 3 lines
+            while (feed.children.length > 3) feed.removeChild(feed.lastChild);
+        }
+
+        // ═══════════════════════════════════════════
+        //  PYTHON ↔ JS BRIDGE  (WebSocket on 7765)
+        // ═══════════════════════════════════════════
+        let ws = null;
+        let wsReady = false;
+
+        function connectWS() {
+            ws = new WebSocket('ws://localhost:7765');
+            ws.onopen = () => {
+                wsReady = true;
+                addLog('Connected to Nova agent');
+                setState('sleeping');
+            };
+            ws.onerror = () => {
+                wsReady = false;
+                setResult('Cannot connect to Nova agent. Is nova_agent.py running?', '⚠️');
+            };
+            ws.onclose = () => {
+                wsReady = false;
+                setState('sleeping');
+                setTimeout(connectWS, 3000);
+            };
+            ws.onmessage = (evt) => {
+                try {
+                    const msg = JSON.parse(evt.data);
+                    handleEvent(msg);
+                } catch (e) { console.error(e); }
+            };
+        }
+
+        function handleEvent(msg) {
+            switch (msg.type) {
+                case 'status':
+                    const s = (msg.payload || '').toLowerCase();
+                    if (s.includes('listening')) setState('listening');
+                    else if (s.includes('process')) setState('processing');
+                    else if (s.includes('speak')) setState('speaking');
+                    else setState('sleeping');
+                    break;
+                case 'transcription':
+                    setTranscript(msg.payload?.text || '');
+                    setState('listening');
+                    break;
+                case 'decision':
+                    addLog(`Action: ${msg.payload?.action || '?'}`);
+                    setState('processing');
+                    break;
+                case 'action_result':
+                    setResult(msg.payload || '', getResultIcon(msg.payload || ''));
+                    setState('speaking');
+                    setTimeout(() => { if (agentState === 'speaking') setState('listening'); }, 2500);
+                    break;
+                case 'mode_switch':
+                    setState(msg.payload ? 'listening' : 'sleeping');
+                    if (msg.payload) addLog('Listening mode activated');
+                    break;
+                case 'init':
+                    const ww = msg.payload?.wake_word || 'nova';
+                    const wakeBadge = document.querySelector('.wake-badge');
+                    if (wakeBadge) wakeBadge.innerHTML = `Wake: <span>${ww}</span>`;
+                    break;
+                case 'volume':
+                    volumeLevel = Math.min(1, Math.max(0, parseFloat(msg.payload) || 0));
+                    break;
+            }
+        }
+
+        function getResultIcon(text) {
+            const t = text.toLowerCase();
+            if (t.includes('open')) return '🚀';
+            if (t.includes('search')) return '🔍';
+            if (t.includes('scroll')) return '↕️';
+            if (t.includes('click')) return '🖱';
+            if (t.includes('type')) return '⌨️';
+            if (t.includes('volume')) return '🔊';
+            if (t.includes('screenshot')) return '📸';
+            if (t.includes('error') || t.includes('failed')) return '⚠️';
+            if (t.includes('hello') || t.includes('hi')) return '👋';
+            return '✦';
+        }
+
+        function sendCommand(cmd) {
+            if (ws && wsReady) {
+                ws.send(JSON.stringify({ type: 'ui_command', payload: cmd }));
+            }
+        }
+
+        // ═══════════════════════════════════════════
+        //  BUTTON HANDLERS
+        // ═══════════════════════════════════════════
+        function toggleListen() {
+            if (agentState === 'sleeping') {
+                sendCommand('wake');
+                setState('listening');
+                addLog('Manually activated');
+            } else {
+                sendCommand('sleep');
+                setState('sleeping');
+                addLog('Manually deactivated');
+            }
+        }
+
+        function calibrateMic() {
+            sendCommand('calibrate');
+            addLog('Calibrating microphone…');
+            setResult('Calibrating mic, stay silent…', '🎙');
+        }
+
+        function stopAgent() {
+            sendCommand('stop');
+            addLog('Stop command sent');
+            setState('sleeping');
+            setResult('Agent stopped.', '🛑');
+        }
+
+        function openSettings() {
+            addLog('Settings (coming soon)');
+        }
+
+        function minimizeWidget() {
+            widgetState = widgetState === 'minimized' ? 'normal' : 'minimized';
+            applyWidgetState();
+        }
+
+        function maximizeWidget() {
+            widgetState = widgetState === 'maximized' ? 'normal' : 'maximized';
+            applyWidgetState();
+        }
+
+        function applyWidgetState() {
+            const widget = document.getElementById('novaWidget');
+            const minimizeBtn = document.getElementById('minimizeBtn');
+            const maximizeBtn = document.getElementById('maximizeBtn');
+            const isMinimized = widgetState === 'minimized';
+            const isMaximized = widgetState === 'maximized';
+
+            widget.classList.toggle('minimized', isMinimized);
+            widget.classList.toggle('maximized', isMaximized);
+
+            minimizeBtn.textContent = isMinimized ? '+' : '—';
+            minimizeBtn.title = isMinimized ? 'Restore' : 'Minimize';
+            maximizeBtn.textContent = isMaximized ? '❐' : '□';
+            maximizeBtn.title = isMaximized ? 'Restore' : 'Maximize';
+
+            localStorage.setItem('nova-widget-state', widgetState);
+        }
+
+        function pinWidgetTopRight() {
+            const margin = 24;
+            try {
+                if (typeof window.moveTo === 'function' && typeof window.outerWidth === 'number') {
+                    const x = Math.max(0, (screen.availWidth || window.innerWidth) - window.outerWidth - margin);
+                    const y = margin;
+                    window.moveTo(x, y);
+                }
+            } catch (e) {
+                console.debug('Top-right pin skipped', e);
+            }
+        }
+
+        // ═══════════════════════════════════════════
+        //  DRAG (for windowed mode via PyWebView etc)
+        // ═══════════════════════════════════════════
+        const widget = document.getElementById('novaWidget');
+        let dragging = false;
+        let dragStartX = 0, dragStartY = 0;
+        let widgetStartLeft = 0, widgetStartTop = 0;
+
+        let draggedSinceMouseDown = false;
+
+        function shouldStartDrag(target) {
+            return !target.closest('.mic-icon, .icon-btn');
+        }
+
+        function onMiniAssistantClick(event) {
+            if (draggedSinceMouseDown) {
+                event.preventDefault();
+                return;
+            }
+            minimizeWidget();
+        }
+
+        widget.addEventListener('mousedown', e => {
+            if (widgetState === 'maximized' || !shouldStartDrag(e.target)) return;
+            dragging = true;
+            draggedSinceMouseDown = false;
+            dragStartX = e.screenX;
+            dragStartY = e.screenY;
+            const rect = widget.getBoundingClientRect();
+            widgetStartLeft = rect.left;
+            widgetStartTop = rect.top;
+            widget.classList.add('dragging');
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', e => {
+            if (!dragging) return;
+            // For pywebview window dragging — send move request
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.move_window(e.screenX - dragStartX, e.screenY - dragStartY);
+                dragStartX = e.screenX;
+                dragStartY = e.screenY;
+            } else {
+                const dx = e.screenX - dragStartX;
+                const dy = e.screenY - dragStartY;
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) draggedSinceMouseDown = true;
+                widget.style.left = `${Math.max(0, widgetStartLeft + dx)}px`;
+                widget.style.top = `${Math.max(0, widgetStartTop + dy)}px`;
+                widget.style.right = 'auto';
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            dragging = false;
+            widget.classList.remove('dragging');
+            setTimeout(() => { draggedSinceMouseDown = false; }, 0);
+        });
+
+        // ── Demo simulation when no backend ──
+        function runDemo() {
+            const demo = [
+                { delay: 1000, fn: () => setState('listening') },
+                { delay: 2500, fn: () => { setTranscript('nova open chrome'); setState('processing'); addLog('Wake word detected'); } },
+                { delay: 4000, fn: () => { addLog('Action: open chrome'); } },
+                { delay: 5000, fn: () => { setResult('Opening Chrome', '🚀'); setState('speaking'); } },
+                { delay: 7000, fn: () => setState('listening') },
+                { delay: 9000, fn: () => { setTranscript('youtube search lofi music'); setState('processing'); } },
+                { delay: 10500, fn: () => { setResult('Searching YouTube for lofi music', '🔍'); setState('speaking'); addLog('Action: youtube search lofi music'); } },
+                { delay: 13000, fn: () => setState('sleeping') },
+            ];
+            demo.forEach(d => setTimeout(d.fn, d.delay));
+        }
+
+        applyWidgetState();
+        pinWidgetTopRight();
+
+        // Connect to backend; run demo if connection fails after 2s
+        connectWS();
+        setTimeout(() => {
+            if (!wsReady) runDemo();
+        }, 2000);
+    </script>
+</body>
+
+</html>
